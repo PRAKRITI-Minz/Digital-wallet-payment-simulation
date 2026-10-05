@@ -21,7 +21,8 @@ enum class PaymentStatus
     MERCHANT_NOT_FOUND,
     WALLET_NOT_ACTIVE,
     INSUFFICIENT_BALANCE,
-    DAILY_LIMIT_EXCEEDED
+    DAILY_LIMIT_EXCEEDED,
+    FAILED
 };
 
 class PaymentManager
