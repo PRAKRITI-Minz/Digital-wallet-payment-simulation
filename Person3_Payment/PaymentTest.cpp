@@ -1,5 +1,6 @@
 #include <iostream>
 #include "Payment.h"
+#include "../Person4_Transaction/TransactionManager.h"
 
 int main()
 {
@@ -19,7 +20,12 @@ int main()
         customer1->addMoney(100000);
     }
 
-    PaymentManager paymentManager(walletManager);
+    TransactionManager transactionManager;
+
+    PaymentManager paymentManager(
+        walletManager,
+        transactionManager
+);
 
     std::cout << "\n========================================\n";
     std::cout << "       PAYMENT MODULE TESTING\n";
@@ -57,13 +63,28 @@ int main()
 
     std::cout << paymentManager.getPaymentStatusMessage(status)
               << '\n';
+    
+    // ----------------------------------------
+    // TEST 3: REFUND
+    // ----------------------------------------
+    std::cout << "\nTest 3: Refund M1001 -> U1001 (₹200)\n";
+
+status =
+    paymentManager.refundPayment(
+        "M1001",
+        "U1001",
+        20000
+    );
+
+std::cout << paymentManager.getPaymentStatusMessage(status)
+          << '\n';
 
 
     // ----------------------------------------
-    // TEST 3: INSUFFICIENT BALANCE
+    // TEST 4: INSUFFICIENT BALANCE
     // ----------------------------------------
 
-    std::cout << "\nTest 3: U1001 -> U1002 (₹10,000)\n";
+    std::cout << "\nTest 4: U1001 -> U1002 (₹10,000)\n";
 
     status =
         paymentManager.transferMoney(
@@ -77,10 +98,10 @@ int main()
 
 
     // ----------------------------------------
-    // TEST 4: INVALID AMOUNT
+    // TEST 5: INVALID AMOUNT
     // ----------------------------------------
 
-    std::cout << "\nTest 4: U1001 -> U1002 (₹0)\n";
+    std::cout << "\nTest 5: U1001 -> U1002 (₹0)\n";
 
     status =
         paymentManager.transferMoney(
@@ -94,10 +115,10 @@ int main()
 
 
     // ----------------------------------------
-    // TEST 5: SAME ACCOUNT
+    // TEST 6: SAME ACCOUNT
     // ----------------------------------------
 
-    std::cout << "\nTest 5: U1001 -> U1001 (₹100)\n";
+    std::cout << "\nTest 6: U1001 -> U1001 (₹100)\n";
 
     status =
         paymentManager.transferMoney(
@@ -119,6 +140,12 @@ int main()
     std::cout << "========================================\n";
 
     walletManager.displayAllWallets();
+
+    cout << "\n========================================\n";
+    cout << "        RECORDED TRANSACTIONS\n";
+    cout << "========================================\n";
+
+    transactionManager.displayAllTransactions();
 
     return 0;
 }

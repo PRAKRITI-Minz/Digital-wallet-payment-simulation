@@ -1,8 +1,27 @@
 #include "Payment.h"
 #include <iostream>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+using namespace std;
 
-PaymentManager::PaymentManager(WalletManager& manager)
-    : walletManager(manager)
+string getCurrentDateTime() {
+    time_t now = time(nullptr);
+    tm* localTime = localtime(&now);
+
+    stringstream ss;
+
+    ss << put_time(localTime, "%d-%m-%Y %H:%M:%S");
+
+    return ss.str();
+}
+
+PaymentManager::PaymentManager(
+    WalletManager& manager,
+    TransactionManager& transactionManager
+)
+    : walletManager(manager),
+      transactionManager(transactionManager)
 {
 }
 
@@ -23,16 +42,37 @@ PaymentStatus PaymentManager::transferMoney(
     long long amountInPaise)
 {
     // 1. Validate amount
-    if (amountInPaise <= 0)
-        return PaymentStatus::INVALID_AMOUNT;
+if (amountInPaise <= 0)
+{
+    transactionManager.addTransaction(
+        senderId,
+        receiverId,
+        amountInPaise,
+        TransactionType::USER_TRANSFER,
+        TransactionStatus::FAILED,
+        getCurrentDateTime()
+    );
 
+    return PaymentStatus::INVALID_AMOUNT;
+}
     // 2. Check maximum transaction amount
     if (amountInPaise > MAX_TRANSACTION_AMOUNT)
         return PaymentStatus::TRANSACTION_LIMIT_EXCEEDED;
 
     // 3. Sender and receiver cannot be the same
-    if (senderId == receiverId)
-        return PaymentStatus::SAME_ACCOUNT;
+if (senderId == receiverId)
+{
+    transactionManager.addTransaction(
+        senderId,
+        receiverId,
+        amountInPaise,
+        TransactionType::USER_TRANSFER,
+        TransactionStatus::FAILED,
+        getCurrentDateTime()
+    );
+
+    return PaymentStatus::SAME_ACCOUNT;
+}
 
     // 4. Find sender wallet
     Wallet* senderWallet =
@@ -55,9 +95,20 @@ PaymentStatus PaymentManager::transferMoney(
         return PaymentStatus::WALLET_NOT_ACTIVE;
     }
 
-    // 7. Check balance first
-    if (amountInPaise > senderWallet->getBalanceInPaise())
-        return PaymentStatus::INSUFFICIENT_BALANCE;
+ // 7. Check balance first
+if (amountInPaise > senderWallet->getBalanceInPaise())
+{
+    transactionManager.addTransaction(
+        senderId,
+        receiverId,
+        amountInPaise,
+        TransactionType::USER_TRANSFER,
+        TransactionStatus::FAILED,
+        getCurrentDateTime()
+    );
+
+    return PaymentStatus::INSUFFICIENT_BALANCE;
+}
 
     // 8. Check daily spending limit
     if (amountInPaise >
@@ -71,14 +122,26 @@ PaymentStatus PaymentManager::transferMoney(
         return PaymentStatus::FAILED;
 
     // 10. Credit receiver
+    
     if (!receiverWallet->addMoney(amountInPaise))
-    {
-        // Rollback if receiver cannot be credited
-        senderWallet->addMoney(amountInPaise);
-        return PaymentStatus::FAILED;
-    }
+{
+    // Rollback if receiver cannot be credited
+    senderWallet->addMoney(amountInPaise);
+    return PaymentStatus::FAILED;
+}
 
-    return PaymentStatus::SUCCESS;
+// Record successful transaction
+transactionManager.addTransaction(
+    senderId,
+    receiverId,
+    amountInPaise,
+    TransactionType::USER_TRANSFER,
+    TransactionStatus::SUCCESS,
+    getCurrentDateTime()
+);
+
+return PaymentStatus::SUCCESS;
+
 }
 
 PaymentStatus PaymentManager::payMerchant(
@@ -131,14 +194,24 @@ PaymentStatus PaymentManager::payMerchant(
         return PaymentStatus::FAILED;
 
     // 9. Credit merchant
+    
     if (!merchantWallet->addMoney(amountInPaise))
-    {
-        // Rollback customer payment
-        customerWallet->addMoney(amountInPaise);
-        return PaymentStatus::FAILED;
-    }
+{
+    // Rollback customer payment
+    customerWallet->addMoney(amountInPaise);
+    return PaymentStatus::FAILED;
+}
 
-    return PaymentStatus::SUCCESS;
+// Record successful merchant payment
+transactionManager.addTransaction(
+    customerId,
+    merchantId,
+    amountInPaise,
+    TransactionType::MERCHANT_PAYMENT,
+    TransactionStatus::SUCCESS,
+    getCurrentDateTime()
+);
+return PaymentStatus::SUCCESS;
 }
 std::string PaymentManager::getPaymentStatusMessage(
     PaymentStatus status) const
@@ -180,4 +253,62 @@ std::string PaymentManager::getPaymentStatusMessage(
     }
 
     return "Payment failed: Unknown error.";
+}
+PaymentStatus PaymentManager::refundPayment(
+    const std::string& merchantId,
+    const std::string& customerId,
+    long long amountInPaise)
+{
+    // 1. Validate amount
+    if (amountInPaise <= 0)
+        return PaymentStatus::INVALID_AMOUNT;
+
+    // 2. Find merchant wallet
+    Wallet* merchantWallet =
+        walletManager.getWalletByOwnerId(merchantId);
+
+    if (merchantWallet == nullptr)
+        return PaymentStatus::MERCHANT_NOT_FOUND;
+
+    // 3. Find customer wallet
+    Wallet* customerWallet =
+        walletManager.getWalletByOwnerId(customerId);
+
+    if (customerWallet == nullptr)
+        return PaymentStatus::RECEIVER_NOT_FOUND;
+
+    // 4. Both wallets must be active
+    if (!merchantWallet->isActive() ||
+        !customerWallet->isActive())
+    {
+        return PaymentStatus::WALLET_NOT_ACTIVE;
+    }
+
+    // 5. Merchant must have enough balance
+    if (amountInPaise > merchantWallet->getBalanceInPaise())
+        return PaymentStatus::INSUFFICIENT_BALANCE;
+
+    // 6. Deduct from merchant
+    if (!merchantWallet->deductMoney(amountInPaise))
+        return PaymentStatus::FAILED;
+
+    // 7. Add money back to customer
+    if (!customerWallet->addMoney(amountInPaise))
+    {
+        // Rollback
+        merchantWallet->addMoney(amountInPaise);
+        return PaymentStatus::FAILED;
+    }
+
+    // 8. Record refund transaction
+    transactionManager.addTransaction(
+        merchantId,
+        customerId,
+        amountInPaise,
+        TransactionType::REFUND,
+        TransactionStatus::REFUNDED,
+        getCurrentDateTime()
+    );
+
+    return PaymentStatus::SUCCESS;
 }

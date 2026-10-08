@@ -4,6 +4,8 @@
 #include <string>
 #include "../Person2_Wallet/WalletManager.h"
 
+#include "../Person4_Transaction/TransactionManager.h"
+
 enum class PaymentType
 {
     USER_TRANSFER,
@@ -28,7 +30,10 @@ enum class PaymentStatus
 class PaymentManager
 {
 private:
+   
+   private:
     WalletManager& walletManager;
+    TransactionManager& transactionManager;
 
     // Maximum amount allowed in one transaction = ₹50,000
     static const long long MAX_TRANSACTION_AMOUNT = 5000000;
@@ -36,7 +41,11 @@ private:
     bool validateAmount(long long amountInPaise) const;
 
 public:
-    PaymentManager(WalletManager& manager);
+    
+    PaymentManager(
+    WalletManager& manager,
+    TransactionManager& transactionManager  
+);
 
     PaymentStatus transferMoney(const std::string& senderId,
                        const std::string& receiverId,
@@ -45,8 +54,14 @@ public:
     PaymentStatus payMerchant(const std::string& customerId,
                      const std::string& merchantId,
                      long long amountInPaise);
+    PaymentStatus refundPayment(
+    const std::string& merchantId,
+    const std::string& customerId,
+    long long amountInPaise
+);
 
     std::string getPaymentStatusMessage(PaymentStatus status) const;
+    
 };
 
 #endif
